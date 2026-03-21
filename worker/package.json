@@ -1,0 +1,21 @@
+{
+  "name": "worker",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "build": "tsc --noEmit",
+    "deploy": "wrangler deploy",
+    "lint": "eslint \"src/**/*.ts\""
+  },
+  "dependencies": {
+    "hono": "4.12.8"
+  },
+  "devDependencies": {
+    "@types/node": "25.5.0",
+    "typescript": "5.9.3",
+    "wrangler": "4.76.0"
+  }
+}
+

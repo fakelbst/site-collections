@@ -1,0 +1,12 @@
+name = "my-bookmarks-worker"
+main = "src/index.ts"
+compatibility_date = "2026-03-21"
+
+[vars]
+PAGES_ORIGIN = "https://your-project.pages.dev"
+
+[[kv_namespaces]]
+binding = "SITES_KV"
+id = "0fb86bd678fb46ac96080285d76a6083"
+preview_id = "ab6404917b814f58905247e5b2e484b1"
+
