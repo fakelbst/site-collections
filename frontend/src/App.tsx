@@ -1,11 +1,14 @@
 import { startTransition, useDeferredValue, useState } from 'react';
 import { CategoryFilter } from '@/components/CategoryFilter';
+import { HiddenAddEntry } from '@/components/HiddenAddEntry';
+import { SiteHeader } from '@/components/SiteHeader';
 import { SiteCard } from '@/components/SiteCard';
 import { useSites } from '@/hooks/useSites';
 import { type Site, type SiteFilter } from '@/types';
 
 const INITIAL_VISIBLE_COUNT = 6;
 const LOAD_MORE_COUNT = 3;
+const HIDDEN_ENTRY_PATH = '/add';
 
 const ALL_FILTER: SiteFilter = 'All';
 
@@ -37,6 +40,16 @@ const matchesSearch = (site: Site, query: string) => {
 };
 
 export default function App() {
+  const pathname = typeof window === 'undefined' ? '/' : window.location.pathname.replace(/\/$/, '') || '/';
+
+  if (pathname === HIDDEN_ENTRY_PATH) {
+    return <HiddenAddEntry />;
+  }
+
+  return <CollectionHome />;
+}
+
+function CollectionHome() {
   const [activeFilter, setActiveFilter] = useState<SiteFilter>(ALL_FILTER);
   const [searchQuery, setSearchQuery] = useState('');
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_COUNT);
@@ -67,16 +80,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#f5f7f9] text-[#2c2f31]">
-      <nav className="fixed top-0 z-50 w-full bg-white/80 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-screen-2xl items-center justify-between px-4 py-4 sm:px-6">
-          <div className="flex items-center gap-6 sm:gap-8">
-            <span className="text-base font-bold tracking-[-0.04em] text-slate-900 sm:text-xl">
-              The Digital Curator
-            </span>
-          </div>
-        </div>
-        <div className="h-px w-full bg-slate-100" />
-      </nav>
+      <SiteHeader />
 
       <main className="mx-auto max-w-screen-2xl px-4 pb-20 pt-24 sm:px-6">
         <section className="mb-12 space-y-8">
@@ -121,7 +125,7 @@ export default function App() {
         {!sitesQuery.isLoading && sitesQuery.isError ? (
           <div className="mt-12 rounded-[24px] bg-rose-50 p-8 text-center">
             <h2 className="text-2xl font-extrabold tracking-[-0.03em] text-rose-900">
-              列表加载失败
+              Failed to load the collection
             </h2>
             <p className="mt-3 text-sm leading-7 text-rose-700">{sitesQuery.error.message}</p>
             <button
@@ -129,7 +133,7 @@ export default function App() {
               onClick={() => void sitesQuery.refetch()}
               className="mt-5 rounded-full bg-rose-600 px-5 py-3 text-sm font-bold text-white"
             >
-              重新加载
+              Try Again
             </button>
           </div>
         ) : null}
@@ -137,10 +141,10 @@ export default function App() {
         {!sitesQuery.isLoading && !sitesQuery.isError && filteredSites.length === 0 ? (
           <div className="mt-12 rounded-[24px] bg-[#eef1f3] p-10 text-center">
             <h2 className="text-2xl font-extrabold tracking-[-0.03em] text-[#2c2f31]">
-              没有找到匹配内容
+              No matching sites found
             </h2>
             <p className="mx-auto mt-3 max-w-xl text-sm leading-7 text-[#595c5e]">
-              试试切换分类，或者换一个搜索关键词重新查看你的收藏。
+              Try a different category or adjust your search to explore the collection again.
             </p>
           </div>
         ) : null}

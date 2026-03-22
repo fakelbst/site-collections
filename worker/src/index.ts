@@ -22,7 +22,7 @@ interface KVStore {
 interface Bindings {
   SECRET_KEY: string;
   GEEKFLARE_API_KEY: string;
-  PAGES_ORIGIN: string;
+  ALLOWED_ORIGINS?: string;
   SITES_KV: KVStore;
 }
 
@@ -56,6 +56,13 @@ type GeekflareScreenshotResponse = {
 };
 
 const SITES_KEY = 'sites';
+const LEGACY_CATEGORY_ALIASES = {
+  design: '\u8bbe\u8ba1',
+  tools: '\u5de5\u5177',
+  blog: '\u535a\u5ba2',
+  news: '\u8d44\u8baf',
+  other: '\u5176\u4ed6',
+} as const;
 let writeQueue = Promise.resolve();
 
 const app = new Hono<{ Bindings: Bindings }>();
@@ -63,12 +70,18 @@ const app = new Hono<{ Bindings: Bindings }>();
 app.use('/api/*', async (c, next) => {
   const origin = c.req.header('origin');
 
-  if (origin && !isAllowedOrigin(origin, c.env.PAGES_ORIGIN)) {
+  if (!origin) {
+    return next();
+  }
+
+  const allowedOrigin = getAllowedOrigin(origin, c.req.url, c.env.ALLOWED_ORIGINS);
+
+  if (!allowedOrigin) {
     return c.json({ error: 'Origin not allowed.' }, 403);
   }
 
   const corsMiddleware = cors({
-    origin: origin ?? c.env.PAGES_ORIGIN,
+    origin: allowedOrigin,
     allowMethods: ['GET', 'POST', 'OPTIONS'],
     allowHeaders: ['Content-Type', 'x-secret-key'],
     maxAge: 86_400,
@@ -94,33 +107,17 @@ app.post('/api/add', async (c) => {
   const url = body?.url?.trim();
 
   if (!url) {
-    return c.json({ error: 'Body 必须包含合法的 url 字段。' }, 400);
+    return c.json({ error: 'The request body must include a valid url field.' }, 400);
   }
 
   const normalizedUrl = normalizeUrl(url);
 
   if (!normalizedUrl) {
-    return c.json({ error: '仅支持 http 或 https 链接。' }, 400);
+    return c.json({ error: 'Only http and https URLs are supported.' }, 400);
   }
 
   try {
-    const pageMeta = await fetchGeekflareMeta(c.env.GEEKFLARE_API_KEY, normalizedUrl);
-    const screenshot = await fetchGeekflareScreenshot(c.env.GEEKFLARE_API_KEY, normalizedUrl);
-    const category = categorize(pageMeta, normalizedUrl);
-    const ogImage = pickOgImage(pageMeta);
-
-    const newSite: Site = {
-      id: crypto.randomUUID(),
-      url: normalizedUrl,
-      title: pickTitle(pageMeta, normalizedUrl),
-      description: pickDescription(pageMeta),
-      category,
-      screenshot,
-      addedAt: new Date().toISOString(),
-      ...(ogImage ? { ogImage } : {}),
-    };
-
-    const updatedSites = await updateSitesAtomically(c.env.SITES_KV, (sites) => [newSite, ...sites]);
+    const updatedSites = await addSite(c.env, normalizedUrl);
 
     return c.json({
       success: true,
@@ -130,7 +127,7 @@ app.post('/api/add', async (c) => {
     const message =
       error instanceof Error
         ? error.message
-        : 'Geekflare 抓取失败，请确认 API Key、目标网站可访问性以及额度情况。';
+        : 'Geekflare failed to fetch the site. Check the API key, site availability, and usage limits.';
 
     return c.json({ error: message }, 502);
   }
@@ -139,6 +136,26 @@ app.post('/api/add', async (c) => {
 app.notFound((c) => c.json({ error: 'Not found.' }, 404));
 
 export default app;
+
+async function addSite(env: Bindings, normalizedUrl: string): Promise<Site[]> {
+  const pageMeta = await fetchGeekflareMeta(env.GEEKFLARE_API_KEY, normalizedUrl);
+  const screenshot = await fetchGeekflareScreenshot(env.GEEKFLARE_API_KEY, normalizedUrl);
+  const category = categorize(pageMeta, normalizedUrl);
+  const ogImage = pickOgImage(pageMeta);
+
+  const newSite: Site = {
+    id: crypto.randomUUID(),
+    url: normalizedUrl,
+    title: pickTitle(pageMeta, normalizedUrl),
+    description: pickDescription(pageMeta),
+    category,
+    screenshot,
+    addedAt: new Date().toISOString(),
+    ...(ogImage ? { ogImage } : {}),
+  };
+
+  return updateSitesAtomically(env.SITES_KV, (sites) => [newSite, ...sites]);
+}
 
 async function fetchGeekflareMeta(apiKey: string, url: string): Promise<GeekflareMetaData> {
   const response = await fetch('https://api.geekflare.com/metascraping', {
@@ -157,20 +174,20 @@ async function fetchGeekflareMeta(apiKey: string, url: string): Promise<Geekflar
   const result = (await response.json().catch(() => null)) as GeekflareMetaResponse | null;
 
   if (!response.ok || result?.apiStatus !== 'success' || !result?.data) {
-    throw new Error(result?.message ?? 'Geekflare metascraping 失败。');
+    throw new Error(result?.message ?? 'Geekflare metascraping failed.');
   }
 
   if (typeof result.data === 'string') {
     const fallbackResponse = await fetch(result.data);
 
     if (!fallbackResponse.ok) {
-      throw new Error('Geekflare metascraping 返回了无效的数据地址。');
+      throw new Error('Geekflare metascraping returned an invalid data URL.');
     }
 
     const fallbackData = (await fallbackResponse.json().catch(() => null)) as GeekflareMetaData | null;
 
     if (!fallbackData || typeof fallbackData !== 'object') {
-      throw new Error('Geekflare metascraping 数据格式无法解析。');
+      throw new Error('Geekflare metascraping returned data in an unreadable format.');
     }
 
     return fallbackData;
@@ -198,7 +215,7 @@ async function fetchGeekflareScreenshot(apiKey: string, url: string): Promise<st
   const result = (await response.json().catch(() => null)) as GeekflareScreenshotResponse | null;
 
   if (!response.ok || result?.apiStatus !== 'success' || !result?.data) {
-    throw new Error(result?.message ?? 'Geekflare screenshot 失败。');
+    throw new Error(result?.message ?? 'Geekflare screenshot capture failed.');
   }
 
   return result.data;
@@ -248,12 +265,32 @@ async function updateSitesAtomically(
   return run;
 }
 
-function isAllowedOrigin(origin: string, pagesOrigin: string): boolean {
-  return (
-    origin === pagesOrigin ||
-    origin.startsWith('http://localhost:') ||
-    origin.startsWith('http://127.0.0.1:')
-  );
+function getAllowedOrigin(
+  origin: string,
+  requestUrl: string,
+  allowedOriginsValue?: string,
+): string | null {
+  const requestOrigin = new URL(requestUrl).origin;
+
+  if (origin === requestOrigin || isLocalOrigin(origin)) {
+    return origin;
+  }
+
+  const allowedOrigins = allowedOriginsValue
+    ?.split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  return allowedOrigins?.includes(origin) ? origin : null;
+}
+
+function isLocalOrigin(origin: string): boolean {
+  try {
+    const { hostname, protocol } = new URL(origin);
+    return ['http:', 'https:'].includes(protocol) && ['localhost', '127.0.0.1'].includes(hostname);
+  } catch {
+    return false;
+  }
 }
 
 function normalizeSite(site: Site): Site {
@@ -267,21 +304,21 @@ function normalizeCategory(category: string): SiteCategory {
   const normalized = category.trim().toLowerCase();
 
   switch (normalized) {
-    case '设计':
+    case LEGACY_CATEGORY_ALIASES.design:
     case 'design':
       return 'Design';
-    case '工具':
+    case LEGACY_CATEGORY_ALIASES.tools:
     case 'tool':
     case 'tools':
     case 'productivity':
       return 'Tools';
-    case '博客':
+    case LEGACY_CATEGORY_ALIASES.blog:
     case 'blog':
       return 'Blog';
-    case '资讯':
+    case LEGACY_CATEGORY_ALIASES.news:
     case 'news':
       return 'News';
-    case '其他':
+    case LEGACY_CATEGORY_ALIASES.other:
     case 'archive':
     case 'other':
     default:
@@ -301,7 +338,7 @@ function pickDescription(pageMeta: GeekflareMetaData): string {
   return (
     pageMeta.description?.trim() ||
     findMetaValue(pageMeta.metaTags, ['description', 'og:description', 'twitter:description']) ||
-    'Geekflare 没有返回描述信息。'
+    'Geekflare did not return a description.'
   );
 }
 

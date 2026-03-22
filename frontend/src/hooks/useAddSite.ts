@@ -4,19 +4,22 @@ import type { AddSitePayload, AddSiteResponse } from "@/types";
 
 const addKey = import.meta.env.VITE_ADD_KEY?.trim();
 
-const requestAddSite = async (payload: AddSitePayload): Promise<AddSiteResponse> => {
+export const requestAddSite = async (
+  payload: AddSitePayload,
+  secretKey = addKey,
+): Promise<AddSiteResponse> => {
   const response = await fetch(getApiUrl('/api/add'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...(addKey ? { 'x-secret-key': addKey } : {}),
+      ...(secretKey ? { 'x-secret-key': secretKey } : {}),
     },
     body: JSON.stringify(payload),
   });
 
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(body?.error ?? '添加站点失败，请确认链接和 Worker 配置。');
+    throw new Error(body?.error ?? 'Unable to add the site. Please check the URL and Worker configuration.');
   }
 
   return (await response.json()) as AddSiteResponse;
@@ -32,4 +35,3 @@ export const useAddSite = () => {
     },
   });
 };
-

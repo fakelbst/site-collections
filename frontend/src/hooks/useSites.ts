@@ -6,7 +6,7 @@ const fetchSites = async (): Promise<Site[]> => {
   const response = await fetch(getApiUrl('/api/sites'));
 
   if (!response.ok) {
-    throw new Error('暂时无法加载收藏列表，请稍后重试。');
+    throw new Error('Unable to load the collection right now. Please try again.');
   }
 
   const data = (await response.json()) as Site[];
@@ -19,4 +19,3 @@ export const useSites = () =>
     queryFn: fetchSites,
     staleTime: 60_000,
   });
-

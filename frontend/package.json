@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "build:watch": "tsc --noEmit && vite build --watch",
     "lint": "eslint \"src/**/*.{ts,tsx}\" vite.config.ts tailwind.config.ts"
   },
   "dependencies": {
@@ -24,4 +25,3 @@
     "vite": "8.0.1"
   }
 }
-

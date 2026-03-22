@@ -48,7 +48,7 @@ export function SiteCard({ site }: { site: Site }) {
           </h2>
 
           <p className="line-clamp-3 text-sm leading-relaxed text-[#595c5e]">
-            {site.description || '这个站点没有返回描述信息，但值得先收藏起来。'}
+            {site.description || 'No description was returned for this site, but it is still worth saving.'}
           </p>
 
           <div className="mt-auto pt-2 text-[11px] uppercase tracking-[0.16em] text-[#9a9d9f]">
